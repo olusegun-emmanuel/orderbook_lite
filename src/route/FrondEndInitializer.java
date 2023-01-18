@@ -1,25 +1,15 @@
 package route;
 
+import constants.Constants;
 import entities.Orders;
 import entities.OrdersList;
-import java.util.InputMismatchException;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Scanner;
+import services.OrderEntityMatchingAction;
+
+import java.util.*;
 
 public class FrondEndInitializer {
-
-    private final String newOrderHeading = "\nMARKET DISRUPTOR PLATFORM - ADD NEW ORDER";
-    private final String editOrderHeading = "\nMARKET DISRUPTOR PLATFORM - EDIT ORDER";
-    private final String removeOrderHeading =  "\nMARKET DISRUPTOR PLATFORM - REMOVE ORDER";
-    private final String generalInstructions = "========================================================================================\n" +
-            "INSTRUCTIONS: \n" +
-            "Enter : C to cancel \n" +
-            "=========================================================================================\n" ;
-    private final String buyAppend = "A";
-    private final String sellAppend = "B";
-
     private  Scanner userInput;
+    private final Constants constants = new Constants();
     private Orders orders = new Orders();
     public void displayInitialPage(String topHeading){
         System.out.println(topHeading);
@@ -40,7 +30,7 @@ public class FrondEndInitializer {
             System.out.println("DISRUPTOR encountered invalid input, Please enter correct input.");
             userInput.nextLine();
         } catch(Exception e) {
-            System.out.println("System Error Occurred, please retry");
+            System.out.println("System Error Occurred, please retry" + e);
             userInput.nextLine();
         }
     }
@@ -67,8 +57,8 @@ public class FrondEndInitializer {
 
 
     private void displayAddNewOrder(){
-        System.out.println(newOrderHeading);
-        System.out.println(generalInstructions);
+        System.out.println(constants.newOrderHeading);
+        System.out.println(constants.generalInstructions);
         String requestPriceLabel = "Please Enter Price : ";
         System.out.println(requestPriceLabel);
         userInput = new Scanner(System.in);
@@ -100,23 +90,36 @@ public class FrondEndInitializer {
         String enteredSide = userInput.nextLine();
         boolean isString = validateStringInput(enteredSide);
         if (isString) {
-            orders.setSide(enteredSide.toUpperCase());
-            orders.setOrderId(generateUniqueOrderId(enteredSide));
-            orders.setStatus("New");
             List<Orders> existingOrdersList = new LinkedList<>(OrdersList.getOrderList());
             System.out.println( "\n=========================================================================================");
             System.out.println("Existing orders :");
             System.out.println(existingOrdersList);
+            orders.setSide(enteredSide.toUpperCase());
+            orders.setOrderId(generateUniqueOrderId(enteredSide));
+            orders.setStatus(constants.initialStatus);
             System.out.println("Order to be added :");
             System.out.println(orders.toString());
             System.out.println("Order after addition :");
-            existingOrdersList.add(orders);
-            OrdersList.setOrderList(existingOrdersList);
-            List<Orders> newOrdersList = new LinkedList<>(OrdersList.getOrderList());
-            System.out.println(newOrdersList);
+            if(orders.getSide().equals(constants.buySide)) {
+                displayUpdatedOrder(existingOrdersList, orders);
+            } else {
+                //check for existing orders that matches new sell order
+                List<Orders> fillAbleList =  this.getMatchingOrders(existingOrdersList, orders.getPrice());
+                if (fillAbleList.isEmpty()) {
+                    displayUpdatedOrder(existingOrdersList, orders);
+                } else {
+                    //implement matching on sell with buy orders
+                    // reverse matching data to ensure the most reset data is filled first
+                    Collections.reverse(fillAbleList);
+                    OrderEntityMatchingAction orderEntityMatchingAction = new OrderEntityMatchingAction();
+                    orderEntityMatchingAction.implementOrderMatching(fillAbleList, orders.getQuantity());
+                    List<Orders> matchedOrdersList = new LinkedList<>(OrdersList.getOrderList());
+                    orders.setStatus(constants.fullyExecutedStatus);
+                    displayUpdatedOrder(matchedOrdersList, orders);
+                }
 
-            //start over
-            displayInitialPage("");
+            }
+
         }
     }
 
@@ -127,7 +130,7 @@ public class FrondEndInitializer {
             Long enteredValue  = Long.parseLong(input);
             if(enteredValue == 0L){
                 System.out.println("DISRUPTOR is unable to process your price input.\"");
-                if(description == "Price" ){
+                if(description.equals("Price") ){
                     displayAddNewOrder();displayAddNewOrder();
                 } else {
                     displayAddOrderQuantity();
@@ -137,7 +140,7 @@ public class FrondEndInitializer {
             }
         } catch (NumberFormatException e) {
             System.out.println("DISRUPTOR is unable to process your price input.\"");
-            if(description == "Price" ){
+            if(description.equals("Price")){
                 displayAddNewOrder();
             } else {
                 displayAddOrderQuantity();
@@ -150,7 +153,7 @@ public class FrondEndInitializer {
         boolean isStringValue = false;
         String enteredInput = input.toUpperCase();
         try {
-            if((enteredInput.equals("BUY")) || (enteredInput.equals("SELL")) ){
+            if((enteredInput.equals(constants.buySide)) || (enteredInput.equals(constants.sellSide)) ){
                 isStringValue = true;
             } else {
                 System.out.println("DISRUPTOR is unable to process side input.");
@@ -168,8 +171,8 @@ public class FrondEndInitializer {
 
     private void displayEditNewOrder(){
         List<Orders> existingOrdersList = new LinkedList<>(OrdersList.getOrderList());
-        System.out.println(editOrderHeading);
-        System.out.println(generalInstructions);
+        System.out.println(constants.editOrderHeading);
+        System.out.println(constants.generalInstructions);
         String requestOderIdLabel = "Please Enter OrderId : ";
         System.out.println(requestOderIdLabel);
         userInput = new Scanner(System.in);
@@ -211,8 +214,8 @@ public class FrondEndInitializer {
 
     private void displayRemoveNewOrder(){
         List<Orders> existingOrdersList = new LinkedList<>(OrdersList.getOrderList());
-        System.out.println(removeOrderHeading);
-        System.out.println(generalInstructions);
+        System.out.println(constants.removeOrderHeading);
+        System.out.println(constants.generalInstructions);
         String requestOderIdLabel = "Please Enter OrderId : ";
         System.out.println(requestOderIdLabel);
         userInput = new Scanner(System.in);
@@ -234,12 +237,20 @@ public class FrondEndInitializer {
 
     }
 
+    private  void displayUpdatedOrder( List<Orders> existingOrdersList, Orders orders){
+        existingOrdersList.add(orders);
+        OrdersList.setOrderList(existingOrdersList);
+        List<Orders> newOrdersList = new LinkedList<>(OrdersList.getOrderList());
+        System.out.println(newOrdersList);
+        displayInitialPage("");
+    }
+
 
     public String generateUniqueOrderId(String side) {
         int min = 100000;
         int max = 999999;
         int random_int = (int)Math.floor(Math.random()*(max-min+1)+min);
-        return side.equalsIgnoreCase("Buy") ? buyAppend + Integer.toString(random_int) : sellAppend + Integer.toString(random_int);
+        return side.equalsIgnoreCase(constants.buySide) ? constants.buyAppend + Integer.toString(random_int) : constants.sellAppend + Integer.toString(random_int);
     }
 
     private int getOrderIndex(List<Orders> ordersLinkedList, String orderId) {
@@ -261,6 +272,18 @@ public class FrondEndInitializer {
             }
         }
         return isOrderValid;
+    }
+
+    private List<Orders> getMatchingOrders( List<Orders> persistedOrdersList, Long price){
+        List<Orders> matchingOrders = new LinkedList<>();
+        for (Orders value : persistedOrdersList) {
+            if ((Objects.equals(value.getPrice(), price)) & (value.getSide().equals(constants.buySide)) &
+                    (value.getStatus().equals(constants.initialStatus) |
+                    (value.getStatus().equals(constants.partiallyExecutedStatus)))) {
+                matchingOrders.add(value);
+            }
+        }
+        return matchingOrders;
     }
 
 }
